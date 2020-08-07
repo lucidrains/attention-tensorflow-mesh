@@ -99,3 +99,26 @@ def transformer(x, *, depth, dim_head, dim_features_head, causal = False):
             x = attn_fn(x, dim_head, dim_features_head, causal = causal)
             x = ff(x)
     return x
+
+# language model
+
+def transformer_lm(x, *, dim, num_tokens, depth, max_seq_len, dim_head, dim_features_head, causal = False):
+    mesh, batch, seq_dim = x.mesh, *x.shape
+
+    dim = mtf.Dimension('dim', dim)
+    dim_head = mtf.Dimension('dim_head', 12)
+    dim_features_head = mtf.Dimension('dim_features_head', 75)
+    dim_num_tokens = mtf.Dimension('vocab_size', num_tokens)
+    dim_max_seq_len = mtf.Dimension('max_seq_len', max_seq_len)
+
+    wte = mtf.get_variable(mesh, name='wte', shape=mtf.Shape([dim_num_tokens, dim]), dtype=tf.float32)
+    wpe = mtf.get_variable(mesh, name='wpe', shape=mtf.Shape([seq_dim, dim]), dtype=tf.float32)
+
+    x = mtf.gather(wte, x, dim_num_tokens)
+    p = mtf.gather(wpe, mtf.range(mesh, seq_dim, dtype=tf.int32), dim_max_seq_len)
+    x = x + p
+
+    x = transformer(x, depth = depth, dim_head = dim_head, dim_features_head = dim_features_head, causal = causal)
+
+    logits = linear(x, dim_num_tokens, scope='to_logits')
+    return logits
