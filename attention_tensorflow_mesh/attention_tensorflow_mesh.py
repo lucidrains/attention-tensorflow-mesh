@@ -13,8 +13,8 @@ def linear(x, dim_out, scope = 'linear', bias = True):
 
 # full non-causal attention
 
-def attention(x, dim_head, dim_features_head, scope = 'attn'):
-    batch, seq, dim = x.shape
+def attention(x, dim_head, dim_features_head, scope = 'attn', causal = False):
+    mesh, batch, seq, dim = x.mesh, *x.shape
 
     dim_heads = mtf.Dimension('dim_heads', dim_head.size * dim_features_head.size)
     dim_intermediate = mtf.Dimension('qkv_dimension', dim_heads.size * 3)
@@ -28,6 +28,15 @@ def attention(x, dim_head, dim_features_head, scope = 'attn'):
     mem_len_dim = v.shape[-2]
 
     dots = mtf.layers.us_einsum([q, k], [batch, dim_head, seq, mem_len_dim])
+
+    if causal:
+        i = mtf.range(mesh, seq, tf.int32)
+        j = mtf.range(mesh, mem_len_dim, tf.int32)
+        i, j = map(lambda t: mtf.broadcast(t, [seq, mem_len_dim]), (i, j))
+        mask = mtf.less(i, j + mem_len_dim.size - seq.size)
+        mask = mtf.cast(mask, tf.float32) * -1e9
+        dots += mask
+
     attn = mtf.softmax(dots, mem_len_dim)
     out = mtf.einsum([dots, v], [batch, dim_head, seq, dim_features_head])
 
