@@ -106,8 +106,8 @@ def transformer_lm(x, *, dim, num_tokens, depth, max_seq_len, dim_head, dim_feat
     mesh, batch, seq_dim = x.mesh, *x.shape
 
     dim = mtf.Dimension('dim', dim)
-    dim_head = mtf.Dimension('dim_head', 12)
-    dim_features_head = mtf.Dimension('dim_features_head', 75)
+    dim_head = mtf.Dimension('dim_head', dim_head)
+    dim_features_head = mtf.Dimension('dim_features_head', dim_features_head)
     dim_num_tokens = mtf.Dimension('vocab_size', num_tokens)
     dim_max_seq_len = mtf.Dimension('max_seq_len', max_seq_len)
 
