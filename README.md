@@ -46,7 +46,6 @@ logits = transformer_lm(
 	causal = True
 )
 
-
 # placement
 
 mesh_impl = placement_mesh_impl.PlacementMeshImpl(shape=[], layout={}, devices=[""])
