@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
   name = 'attention-tensorflow-mesh',
   packages = find_packages(),
-  version = '0.0.1',
+  version = '0.0.2',
   license='MIT',
   description = 'A bunch of attention related functions, for constructing transformers in tensorflow mesh',
   author = 'Phil Wang',

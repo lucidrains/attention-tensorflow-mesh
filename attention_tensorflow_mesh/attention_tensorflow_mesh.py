@@ -23,16 +23,31 @@ def norm(x, axis = None, epsilon=1e-5):
     axis = default(axis, x.shape[-1])
 
     u = mtf.reduce_mean(x, reduced_dim=axis)
-    s = mtf.reduce_mean(mtf.square(x - u))
+    s = mtf.reduce_mean(mtf.square(x - u), reduced_dim=axis)
 
     u = mtf.broadcast(u, x.shape)
     s = mtf.broadcast(s, x.shape)
 
     return (x - u) * mtf.rsqrt(s + epsilon)
 
-def prenorm(fn):
+def scale_norm(x, scope, *, axis=None, epsilon=1e-5, params=None):
+    if axis is None:
+        axis = x.shape[-1]
+
+    with tf.variable_scope(scope):
+        n_state = x.shape[-1]
+
+        dt = tf.float32
+
+        g = mtf.get_variable(x.mesh, 'g', [], initializer=tf.constant_initializer(1, dtype=dt), dtype=dt)
+
+        x = norm(x, axis, epsilon)
+        x = x * g
+        return x
+
+def prenorm(fn, scope):
     def inner(x, *args, **kwargs):
-        return fn(norm(x), *args, **kwargs)
+        return fn(scale_norm(x, scope), *args, **kwargs)
     return inner
 
 def residual(fn):
@@ -63,12 +78,12 @@ def attention(x, dim_head, dim_features_head, scope = 'attn', causal = False):
             i = mtf.range(mesh, seq, tf.int32)
             j = mtf.range(mesh, mem_len_dim, tf.int32)
             i, j = map(lambda t: mtf.broadcast(t, [seq, mem_len_dim]), (i, j))
-            mask = mtf.less(i, j + mem_len_dim.size - seq.size)
-            mask = mtf.cast(mask, tf.float32) * -1e9
+            mask = mtf.less(i + mem_len_dim.size - seq.size, j)
+            mask = mtf.cast(mask, tf.float32) * -1e10
             dots += mask
 
         attn = mtf.softmax(dots, mem_len_dim)
-        out = mtf.einsum([dots, v], [batch, dim_head, seq, dim_features_head])
+        out = mtf.einsum([attn, v], [batch, dim_head, seq, dim_features_head])
 
         out = mtf.transpose(out, [batch, seq, dim_head, dim_features_head])
         out = mtf.reshape(out, [batch, seq, dim_heads])
@@ -91,13 +106,13 @@ def ff(x, mult = 4, scope = 'ff'):
 # block
 
 def transformer(x, *, depth, dim_head, dim_features_head, causal = False):
-    attn_fn = residual(prenorm(attention))
-    ff_fn = residual(prenorm(ff))
+    attn_fn = residual(prenorm(attention, 'norm1'))
+    ff_fn = residual(prenorm(ff, 'norm2'))
 
     for i in range(depth):
         with tf.variable_scope(f'layer_{i}'):
             x = attn_fn(x, dim_head, dim_features_head, causal = causal)
-            x = ff(x)
+            x = ff_fn(x)
     return x
 
 # language model
